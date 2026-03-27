@@ -72,7 +72,6 @@
 
     // 处理文件
     function processFile(file) {
-        // 检查文件类型
         const validTypes = [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-excel'
@@ -104,10 +103,8 @@
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
-        // 转换为 JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        // 清理数据（跳过空行）
         excelData = jsonData
             .filter(row => row.length >= 2 && row[0] && row[1])
             .map(row => ({
@@ -120,15 +117,12 @@
             return;
         }
 
-        // 显示文件信息
         fileInfo.textContent = `已加载：${fileName}，共 ${excelData.length} 条数据`;
         fileInfo.style.display = 'block';
         fileInput.value = '';
 
-        // 显示预览
         renderPreview();
 
-        // 显示设置和按钮
         previewSection.style.display = 'block';
         settingsSection.style.display = 'block';
         actionSection.style.display = 'block';
@@ -168,8 +162,14 @@
         return 5;
     }
 
+    // 填充画布白色背景
+    function fillWhite(ctx, width, height) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+    }
+
     // 生成 PDF
-    async function generatePDF() {
+    function generatePDF() {
         const columns = getColumnsCount();
 
         // A4 尺寸（mm）
@@ -189,14 +189,10 @@
         // 转换为像素 (1mm ≈ 3.78px at 96dpi)
         const pxPerMm = 3.78;
         const canvasItemWidth = itemWidth * pxPerMm;
-        const canvasItemHeight = itemHeight * pxPerMm;
         const canvasBarcodeHeight = barcodeHeight * pxPerMm;
 
-        // 计算总页数
+        // 计算每页行数
         const rowsPerPage = Math.floor(contentHeight / itemHeight);
-        const totalItems = excelData.length;
-        const totalRows = Math.ceil(totalItems / columns);
-        const totalPages = Math.ceil(totalRows / rowsPerPage);
 
         // 创建 PDF
         const pdf = new window.jspdf.jsPDF({
@@ -209,42 +205,39 @@
         let currentPage = 0;
         let currentRow = 0;
 
-        // 预创建临时 canvas 用于绘制条形码
+        // 创建条形码 canvas
         const barcodeCanvas = document.createElement('canvas');
         barcodeCanvas.width = 300;
-        barcodeCanvas.height = 80;
+        barcodeCanvas.height = 60;
         const barcodeCtx = barcodeCanvas.getContext('2d');
 
-        // 创建每页的大 canvas
+        // 创建页面 canvas
         const pageCanvas = document.createElement('canvas');
-        const pageWidthPx = pageWidth * pxPerMm;
-        const pageHeightPx = pageHeight * pxPerMm;
+        const pageWidthPx = Math.round(pageWidth * pxPerMm);
+        const pageHeightPx = Math.round(pageHeight * pxPerMm);
         pageCanvas.width = pageWidthPx;
         pageCanvas.height = pageHeightPx;
         const pageCtx = pageCanvas.getContext('2d');
 
-        // 设置字体
-        pageCtx.font = 'bold 12px "Microsoft YaHei", "PingFang SC", sans-serif';
+        // 初始化第一页画布（白色背景）
+        fillWhite(pageCtx, pageWidthPx, pageHeightPx);
 
         excelData.forEach((item, index) => {
-            // 计算当前位置
-            const itemIndex = index;
-            const col = itemIndex % columns;
-            const row = Math.floor(itemIndex / columns);
+            const col = index % columns;
+            const row = Math.floor(index / columns);
 
             // 检查是否需要新页
             if (row >= (currentPage + 1) * rowsPerPage) {
                 // 把当前页 canvas 添加到 PDF
-                const pageDataUrl = pageCanvas.toDataURL('image.jpeg', 0.95);
-                pdf.addImage(pageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
+                const pageDataUrl = pageCanvas.toDataURL('image/png');
+                pdf.addImage(pageDataUrl, 'PNG', 0, 0, pageWidth, pageHeight);
 
                 currentPage++;
                 currentRow = currentPage * rowsPerPage;
                 pdf.addPage();
 
-                // 清除画布
-                pageCtx.fillStyle = '#ffffff';
-                pageCtx.fillRect(0, 0, pageWidthPx, pageHeightPx);
+                // 重置画布（白色背景）
+                fillWhite(pageCtx, pageWidthPx, pageHeightPx);
             }
 
             // 计算在页面 canvas 上的位置
@@ -255,44 +248,41 @@
             pageCtx.fillStyle = '#000000';
             pageCtx.font = 'bold 11px "Microsoft YaHei", "PingFang SC", sans-serif';
             pageCtx.textAlign = 'center';
-            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 14);
+            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 12);
 
             // 绘制条形码
             try {
-                barcodeCtx.fillStyle = '#ffffff';
-                barcodeCtx.fillRect(0, 0, barcodeCanvas.width, barcodeCanvas.height);
+                fillWhite(barcodeCtx, barcodeCanvas.width, barcodeCanvas.height);
 
                 JsBarcode(barcodeCanvas, item.code, {
                     format: 'CODE128',
                     width: 1.5,
-                    height: 50,
+                    height: 45,
                     displayValue: false,
-                    margin: 0,
-                    background: '#ffffff'
+                    margin: 0
                 });
 
-                // 将条形码绘制到页面 canvas
                 pageCtx.drawImage(
                     barcodeCanvas,
                     0, 0, barcodeCanvas.width, barcodeCanvas.height,
-                    x + 6, y + 18, canvasItemWidth - 12, canvasBarcodeHeight
+                    x + 6, y + 15, canvasItemWidth - 12, canvasBarcodeHeight
                 );
             } catch (e) {
                 // 条形码失败时显示编码
-                pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
+                pageCtx.font = '8px "Microsoft YaHei", "PingFang SC", sans-serif';
                 pageCtx.fillStyle = '#666666';
-                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 28);
+                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 25);
             }
 
             // 绘制编码（下方）
             pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
             pageCtx.fillStyle = '#000000';
-            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 42);
+            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 38);
         });
 
         // 添加最后一页
-        const finalPageDataUrl = pageCanvas.toDataURL('image/jpeg', 0.95);
-        pdf.addImage(finalPageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
+        const finalPageDataUrl = pageCanvas.toDataURL('image/png');
+        pdf.addImage(finalPageDataUrl, 'PNG', 0, 0, pageWidth, pageHeight);
 
         // 下载 PDF
         const timestamp = new Date().toISOString().slice(0, 10);
