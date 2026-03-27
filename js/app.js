@@ -138,9 +138,9 @@
         previewBody.innerHTML = '';
         const previewRows = excelData.slice(0, 5);
 
-        previewRows.forEach(item => {
+        previewRows.forEach((item, idx) => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td>`;
+            tr.innerHTML = `<td>${idx + 1}</td><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td>`;
             previewBody.appendChild(tr);
         });
 
@@ -194,7 +194,7 @@
         const totalPages = Math.ceil(totalRows / rowsPerPage);
 
         // 创建 PDF
-        const pdf = new jsPDF({
+        const pdf = new window.jspdf.jsPDF({
             orientation: 'portrait',
             unit: 'mm',
             format: 'a4'
