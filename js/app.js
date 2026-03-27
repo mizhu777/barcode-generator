@@ -181,15 +181,22 @@
         const contentWidth = pageWidth - margin * 2;
         const contentHeight = pageHeight - margin * 2;
 
-        // 每个条形码单元的尺寸
+        // 每个条形码单元的尺寸 (mm)
         const itemWidth = contentWidth / columns;
         const itemHeight = 30; // 每行高度（mm）
         const barcodeHeight = 18; // 条形码高度
-        const fontSizeName = 10; // 品名字体大小
-        const fontSizeCode = 9; // 编码字体大小
+
+        // 转换为像素 (1mm ≈ 3.78px at 96dpi)
+        const pxPerMm = 3.78;
+        const canvasItemWidth = itemWidth * pxPerMm;
+        const canvasItemHeight = itemHeight * pxPerMm;
+        const canvasBarcodeHeight = barcodeHeight * pxPerMm;
 
         // 计算总页数
         const rowsPerPage = Math.floor(contentHeight / itemHeight);
+        const totalItems = excelData.length;
+        const totalRows = Math.ceil(totalItems / columns);
+        const totalPages = Math.ceil(totalRows / rowsPerPage);
 
         // 创建 PDF
         const pdf = new window.jspdf.jsPDF({
@@ -198,25 +205,26 @@
             format: 'a4'
         });
 
-        // 加载中文字体
-        try {
-            // 使用内置字体但设置正确的编码
-            // 添加一个标准字体
-            pdf.addFont('Helvetica', 'Standard', 'bold', 'winansi');
-
-            // 设置默认字体
-            pdf.setFont('helvetica');
-        } catch (e) {
-            console.warn('字体加载失败，使用默认字体');
-        }
-
         // 当前页和位置
         let currentPage = 0;
         let currentRow = 0;
 
-        // 预创建一个临时canvas用于生成条形码
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
+        // 预创建临时 canvas 用于绘制条形码
+        const barcodeCanvas = document.createElement('canvas');
+        barcodeCanvas.width = 300;
+        barcodeCanvas.height = 80;
+        const barcodeCtx = barcodeCanvas.getContext('2d');
+
+        // 创建每页的大 canvas
+        const pageCanvas = document.createElement('canvas');
+        const pageWidthPx = pageWidth * pxPerMm;
+        const pageHeightPx = pageHeight * pxPerMm;
+        pageCanvas.width = pageWidthPx;
+        pageCanvas.height = pageHeightPx;
+        const pageCtx = pageCanvas.getContext('2d');
+
+        // 设置字体
+        pageCtx.font = 'bold 12px "Microsoft YaHei", "PingFang SC", sans-serif';
 
         excelData.forEach((item, index) => {
             // 计算当前位置
@@ -226,62 +234,65 @@
 
             // 检查是否需要新页
             if (row >= (currentPage + 1) * rowsPerPage) {
+                // 把当前页 canvas 添加到 PDF
+                const pageDataUrl = pageCanvas.toDataURL('image.jpeg', 0.95);
+                pdf.addImage(pageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
+
                 currentPage++;
                 currentRow = currentPage * rowsPerPage;
                 pdf.addPage();
+
+                // 清除画布
+                pageCtx.fillStyle = '#ffffff';
+                pageCtx.fillRect(0, 0, pageWidthPx, pageHeightPx);
             }
 
-            // 计算 x, y 坐标
-            const x = margin + col * itemWidth;
-            const y = margin + (row - currentRow) * itemHeight;
+            // 计算在页面 canvas 上的位置
+            const x = (margin + col * itemWidth) * pxPerMm;
+            const y = (margin + (row - currentRow) * itemHeight) * pxPerMm;
 
-            // 设置字体（先尝试用 Unicode 方式）
-            pdf.setLanguage('zh-CN');
-
-            // 绘制品名（上方）- 使用 SetDocumentFontWeights 设置粗体
-            pdf.setFontSize(fontSizeName);
-            pdf.setFont('helvetica', 'bold');
-
-            // 处理品名，确保中文字符正确显示
-            const nameText = item.name;
-            pdf.text(nameText, x + itemWidth / 2, y + 3, {
-                align: 'center',
-                encoding: 'UTF-8'
-            });
+            // 绘制品名（上方）
+            pageCtx.fillStyle = '#000000';
+            pageCtx.font = 'bold 11px "Microsoft YaHei", "PingFang SC", sans-serif';
+            pageCtx.textAlign = 'center';
+            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 14);
 
             // 绘制条形码
             try {
-                tempCanvas.width = 200;
-                tempCanvas.height = 60;
+                barcodeCtx.fillStyle = '#ffffff';
+                barcodeCtx.fillRect(0, 0, barcodeCanvas.width, barcodeCanvas.height);
 
-                JsBarcode(tempCanvas, item.code, {
+                JsBarcode(barcodeCanvas, item.code, {
                     format: 'CODE128',
                     width: 1.5,
-                    height: 45,
+                    height: 50,
                     displayValue: false,
                     margin: 0,
                     background: '#ffffff'
                 });
 
-                const barcodeDataUrl = tempCanvas.toDataURL('image/png');
-                const barcodeWidth = itemWidth - 6;
-                const barcodeX = x + 3;
-
-                pdf.addImage(barcodeDataUrl, 'PNG', barcodeX, y + 5, barcodeWidth, barcodeHeight);
+                // 将条形码绘制到页面 canvas
+                pageCtx.drawImage(
+                    barcodeCanvas,
+                    0, 0, barcodeCanvas.width, barcodeCanvas.height,
+                    x + 6, y + 18, canvasItemWidth - 12, canvasBarcodeHeight
+                );
             } catch (e) {
-                // 条形码绘制失败时显示编码文字
-                pdf.setFontSize(8);
-                pdf.setFont('helvetica', 'normal');
-                pdf.text(item.code, x + itemWidth / 2, y + 15, { align: 'center' });
+                // 条形码失败时显示编码
+                pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
+                pageCtx.fillStyle = '#666666';
+                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 28);
             }
 
             // 绘制编码（下方）
-            pdf.setFontSize(fontSizeCode);
-            pdf.setFont('helvetica', 'normal');
-            pdf.text(item.code, x + itemWidth / 2, y + 26, {
-                align: 'center'
-            });
+            pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
+            pageCtx.fillStyle = '#000000';
+            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 42);
         });
+
+        // 添加最后一页
+        const finalPageDataUrl = pageCanvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(finalPageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
 
         // 下载 PDF
         const timestamp = new Date().toISOString().slice(0, 10);
