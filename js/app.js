@@ -79,7 +79,7 @@
         ];
         const extension = file.name.split('.').pop().toLowerCase();
 
-        if (!validTypes.includes(file.type) && !['xlsx', 'xls'].includes(extension)) {
+        if (!validTypes.includes(file.type) && !['xlsx', 'xls', 'csv'].includes(extension)) {
             alert('请上传 Excel 文件 (.xlsx 或 .xls)');
             return;
         }
@@ -87,7 +87,7 @@
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                parseExcel(e.target.result);
+                parseExcel(e.target.result, file.name);
             } catch (err) {
                 alert('解析 Excel 文件失败：' + err.message);
             }
@@ -99,7 +99,7 @@
     }
 
     // 解析 Excel
-    function parseExcel(data) {
+    function parseExcel(data, fileName) {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
@@ -121,7 +121,7 @@
         }
 
         // 显示文件信息
-        fileInfo.textContent = `已加载：${file.name}，共 ${excelData.length} 条数据`;
+        fileInfo.textContent = `已加载：${fileName}，共 ${excelData.length} 条数据`;
         fileInput.value = '';
 
         // 显示预览
