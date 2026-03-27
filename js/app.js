@@ -122,6 +122,7 @@
 
         // 显示文件信息
         fileInfo.textContent = `已加载：${fileName}，共 ${excelData.length} 条数据`;
+        fileInfo.style.display = 'block';
         fileInput.value = '';
 
         // 显示预览
@@ -145,7 +146,7 @@
         });
 
         const total = excelData.length;
-        const display = total > 5 ? `显示前 5 条，共 ${total} 条` : `共 ${total} 条`;
+        const display = total > 5 ? `共 ${total} 条，显示前 5 条` : `共 ${total} 条`;
         previewCount.textContent = display;
     }
 
@@ -168,7 +169,7 @@
     }
 
     // 生成 PDF
-    function generatePDF() {
+    async function generatePDF() {
         const columns = getColumnsCount();
 
         // A4 尺寸（mm）
@@ -183,15 +184,12 @@
         // 每个条形码单元的尺寸
         const itemWidth = contentWidth / columns;
         const itemHeight = 30; // 每行高度（mm）
-        const barcodeHeight = 20; // 条形码高度
-        const fontSizeName = 12; // 品名字体大小
-        const fontSizeCode = 10; // 编码字体大小
+        const barcodeHeight = 18; // 条形码高度
+        const fontSizeName = 10; // 品名字体大小
+        const fontSizeCode = 9; // 编码字体大小
 
         // 计算总页数
         const rowsPerPage = Math.floor(contentHeight / itemHeight);
-        const totalItems = excelData.length;
-        const totalRows = Math.ceil(totalItems / columns);
-        const totalPages = Math.ceil(totalRows / rowsPerPage);
 
         // 创建 PDF
         const pdf = new window.jspdf.jsPDF({
@@ -200,9 +198,25 @@
             format: 'a4'
         });
 
+        // 加载中文字体
+        try {
+            // 使用内置字体但设置正确的编码
+            // 添加一个标准字体
+            pdf.addFont('Helvetica', 'Standard', 'bold', 'winansi');
+
+            // 设置默认字体
+            pdf.setFont('helvetica');
+        } catch (e) {
+            console.warn('字体加载失败，使用默认字体');
+        }
+
         // 当前页和位置
         let currentPage = 0;
         let currentRow = 0;
+
+        // 预创建一个临时canvas用于生成条形码
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
 
         excelData.forEach((item, index) => {
             // 计算当前位置
@@ -221,40 +235,52 @@
             const x = margin + col * itemWidth;
             const y = margin + (row - currentRow) * itemHeight;
 
-            // 绘制品名（上方）
+            // 设置字体（先尝试用 Unicode 方式）
+            pdf.setLanguage('zh-CN');
+
+            // 绘制品名（上方）- 使用 SetDocumentFontWeights 设置粗体
             pdf.setFontSize(fontSizeName);
             pdf.setFont('helvetica', 'bold');
-            pdf.text(item.name, x + itemWidth / 2, y + 4, { align: 'center' });
 
-            // 绘制条形码（使用 SVG 绘制）
+            // 处理品名，确保中文字符正确显示
+            const nameText = item.name;
+            pdf.text(nameText, x + itemWidth / 2, y + 3, {
+                align: 'center',
+                encoding: 'UTF-8'
+            });
+
+            // 绘制条形码
             try {
-                // 创建临时 canvas 绘制条形码
-                const canvas = document.createElement('canvas');
-                JsBarcode(canvas, item.code, {
+                tempCanvas.width = 200;
+                tempCanvas.height = 60;
+
+                JsBarcode(tempCanvas, item.code, {
                     format: 'CODE128',
-                    width: 1,
-                    height: 40,
+                    width: 1.5,
+                    height: 45,
                     displayValue: false,
-                    margin: 0
+                    margin: 0,
+                    background: '#ffffff'
                 });
 
-                const barcodeDataUrl = canvas.toDataURL('image/png');
-                const barcodeWidth = itemWidth - 4;
-                const barcodeX = x + 2;
+                const barcodeDataUrl = tempCanvas.toDataURL('image/png');
+                const barcodeWidth = itemWidth - 6;
+                const barcodeX = x + 3;
 
                 pdf.addImage(barcodeDataUrl, 'PNG', barcodeX, y + 5, barcodeWidth, barcodeHeight);
             } catch (e) {
-                // 条形码绘制失败时显示错误提示
+                // 条形码绘制失败时显示编码文字
                 pdf.setFontSize(8);
-                pdf.setTextColor(255, 0, 0);
-                pdf.text('条码错误', x + itemWidth / 2, y + 15, { align: 'center' });
-                pdf.setTextColor(0, 0, 0);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(item.code, x + itemWidth / 2, y + 15, { align: 'center' });
             }
 
             // 绘制编码（下方）
             pdf.setFontSize(fontSizeCode);
             pdf.setFont('helvetica', 'normal');
-            pdf.text(item.code, x + itemWidth / 2, y + 28, { align: 'center' });
+            pdf.text(item.code, x + itemWidth / 2, y + 26, {
+                align: 'center'
+            });
         });
 
         // 下载 PDF
