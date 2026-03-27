@@ -244,39 +244,43 @@
             const x = (margin + col * itemWidth) * pxPerMm;
             const y = (margin + (row - currentRow) * itemHeight) * pxPerMm;
 
-            // 绘制品名（上方）
+            // 品名在顶部
             pageCtx.fillStyle = '#000000';
             pageCtx.font = 'bold 11px "Microsoft YaHei", "PingFang SC", sans-serif';
             pageCtx.textAlign = 'center';
-            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 12);
+            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 14);
 
-            // 绘制条形码
+            // 条形码在中间
             try {
                 fillWhite(barcodeCtx, barcodeCanvas.width, barcodeCanvas.height);
 
                 JsBarcode(barcodeCanvas, item.code, {
                     format: 'CODE128',
                     width: 1.5,
-                    height: 45,
+                    height: 40,
                     displayValue: false,
                     margin: 0
                 });
 
+                const barcodeImgWidth = canvasItemWidth - 12;
+                const barcodeImgHeight = 50;
+
                 pageCtx.drawImage(
                     barcodeCanvas,
                     0, 0, barcodeCanvas.width, barcodeCanvas.height,
-                    x + 6, y + 15, canvasItemWidth - 12, canvasBarcodeHeight
+                    x + 6, y + 18, barcodeImgWidth, barcodeImgHeight
                 );
             } catch (e) {
                 // 条形码失败时显示编码
                 pageCtx.font = '8px "Microsoft YaHei", "PingFang SC", sans-serif';
                 pageCtx.fillStyle = '#666666';
-                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 25);
+                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 28);
             }
 
-            // 绘制编码（下方）
+            // 编码在底部
             pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
             pageCtx.fillStyle = '#000000';
+            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 42);
             pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 38);
         });
 
