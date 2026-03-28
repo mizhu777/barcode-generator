@@ -8,7 +8,6 @@
 </head>
 <body>
     <div class="page-wrapper">
-        <!-- 头部 -->
         <header class="page-header">
             <div class="header-content">
                 <div class="logo-area">
@@ -25,10 +24,8 @@
             </div>
         </header>
 
-        <!-- 主内容 -->
         <main class="page-content">
             <div class="content-card">
-                <!-- 上传区域 -->
                 <section class="upload-section">
                     <div class="upload-area" id="uploadArea">
                         <div class="upload-icon-wrapper">
@@ -58,33 +55,23 @@
                                 <span class="hint-val">品名（如 螺丝M6x30）</span>
                             </div>
                         </div>
-                        <div class="hint-footer">支持 .xlsx、.xls、.csv 格式</div>
+                        <div class="hint-footer">支持 .xlsx、.xls、.csv 格式，首行表头会自动跳过</div>
                     </div>
                 </section>
 
                 <p class="file-info" id="fileInfo"></p>
 
-                <!-- 预览区域 -->
                 <section class="preview-section" id="previewSection" style="display: none;">
                     <div class="section-title">
-                        <span>数据预览</span>
+                        <span>PDF 预览</span>
                         <span class="count-badge" id="previewCount"></span>
                     </div>
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>序号</th>
-                                    <th>编码</th>
-                                    <th>品名</th>
-                                </tr>
-                            </thead>
-                            <tbody id="previewBody"></tbody>
-                        </table>
+                    <div class="pdf-preview-box">
+                        <img class="pdf-preview-image" id="pdfPreviewImage" alt="PDF第一页预览">
+                        <p class="pdf-preview-note">预览为第一页导出效果</p>
                     </div>
                 </section>
 
-                <!-- 设置区域 -->
                 <section class="settings-section" id="settingsSection" style="display: none;">
                     <div class="section-title">布局设置</div>
                     <div class="setting-row">
@@ -106,7 +93,6 @@
                     </div>
                 </section>
 
-                <!-- 生成按钮 -->
                 <section class="action-section" id="actionSection" style="display: none;">
                     <button class="btn-generate" id="generateBtn">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -118,7 +104,6 @@
             </div>
         </main>
 
-        <!-- 页脚 -->
         <footer class="page-footer">
             <p>Code128 条形码 · A4 纸张直接打印</p>
         </footer>
@@ -127,6 +112,7 @@
     <script src="lib/xlsx.full.min.js"></script>
     <script src="lib/jspdf.min.js"></script>
     <script src="lib/JsBarcode.min.js"></script>
+    <script src="js/barcode-core.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

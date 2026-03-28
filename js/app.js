@@ -3,296 +3,290 @@
  */
 
 (function() {
-    'use strict';
+  'use strict';
 
-    // 状态
-    let excelData = [];
+  const {
+    normalizeRows,
+    getPreviewCountLabel,
+    createPdfRenderConfig,
+    getBarcodeLayoutOffsets
+  } = window.BarcodeCore;
 
-    // DOM 元素
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const fileInfo = document.getElementById('fileInfo');
-    const previewSection = document.getElementById('previewSection');
-    const previewBody = document.getElementById('previewBody');
-    const previewCount = document.getElementById('previewCount');
-    const settingsSection = document.getElementById('settingsSection');
-    const actionSection = document.getElementById('actionSection');
-    const generateBtn = document.getElementById('generateBtn');
-    const columnsGroup = document.getElementById('columnsGroup');
+  let excelData = [];
 
-    // 初始化
-    function init() {
-        setupEventListeners();
+  const uploadArea = document.getElementById('uploadArea');
+  const fileInput = document.getElementById('fileInput');
+  const fileInfo = document.getElementById('fileInfo');
+  const previewSection = document.getElementById('previewSection');
+  const pdfPreviewImage = document.getElementById('pdfPreviewImage');
+  const previewCount = document.getElementById('previewCount');
+  const settingsSection = document.getElementById('settingsSection');
+  const actionSection = document.getElementById('actionSection');
+  const generateBtn = document.getElementById('generateBtn');
+  const columnsGroup = document.getElementById('columnsGroup');
+
+  function init() {
+    setupEventListeners();
+  }
+
+  function setupEventListeners() {
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFileSelect);
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('dragleave', handleDragLeave);
+    uploadArea.addEventListener('drop', handleDrop);
+    generateBtn.addEventListener('click', generatePDF);
+    columnsGroup.addEventListener('change', handleColumnsChange);
+  }
+
+  function handleColumnsChange() {
+    if (excelData.length > 0) {
+      renderPreview();
+    }
+  }
+
+  function handleDragOver(event) {
+    event.preventDefault();
+    uploadArea.classList.add('dragover');
+  }
+
+  function handleDragLeave(event) {
+    event.preventDefault();
+    uploadArea.classList.remove('dragover');
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    uploadArea.classList.remove('dragover');
+
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+      processFile(files[0]);
+    }
+  }
+
+  function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files.length > 0) {
+      processFile(files[0]);
+    }
+  }
+
+  function processFile(file) {
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    const extension = file.name.split('.').pop().toLowerCase();
+
+    if (!validTypes.includes(file.type) && !['xlsx', 'xls', 'csv'].includes(extension)) {
+      alert('请上传 Excel 或 CSV 文件（.xlsx、.xls、.csv）');
+      return;
     }
 
-    // 事件绑定
-    function setupEventListeners() {
-        // 点击上传
-        uploadArea.addEventListener('click', () => fileInput.click());
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      try {
+        parseExcel(event.target.result, file.name);
+      } catch (error) {
+        alert('解析文件失败：' + error.message);
+      }
+    };
+    reader.onerror = function() {
+      alert('读取文件失败');
+    };
+    reader.readAsArrayBuffer(file);
+  }
 
-        // 文件选择
-        fileInput.addEventListener('change', handleFileSelect);
+  function parseExcel(data, fileName) {
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
 
-        // 拖拽上传
-        uploadArea.addEventListener('dragover', handleDragOver);
-        uploadArea.addEventListener('dragleave', handleDragLeave);
-        uploadArea.addEventListener('drop', handleDrop);
+    excelData = normalizeRows(rows);
 
-        // 生成按钮
-        generateBtn.addEventListener('click', generatePDF);
+    if (excelData.length === 0) {
+      alert('文件中没有找到有效数据（需要编码和品名两列）');
+      return;
     }
 
-    // 拖拽处理
-    function handleDragOver(e) {
-        e.preventDefault();
-        uploadArea.classList.add('dragover');
+    fileInfo.textContent = `已加载：${fileName}，共 ${excelData.length} 条数据`;
+    fileInfo.style.display = 'block';
+    fileInput.value = '';
+
+    renderPreview();
+    previewSection.style.display = 'block';
+    settingsSection.style.display = 'block';
+    actionSection.style.display = 'block';
+  }
+
+  function renderPreview() {
+    previewCount.textContent = getPreviewCountLabel(excelData.length);
+    renderPdfPreview();
+  }
+
+  function getColumnsCount() {
+    const selected = columnsGroup.querySelector('input[name="columns"]:checked');
+    return selected ? Number.parseInt(selected.value, 10) : 5;
+  }
+
+  function fillWhite(context, width, height) {
+    context.fillStyle = '#FFFFFF';
+    context.fillRect(0, 0, width, height);
+  }
+
+  function createDrawState(config) {
+    const layout = getBarcodeLayoutOffsets(config);
+    const barcodeCanvas = document.createElement('canvas');
+    barcodeCanvas.width = Math.max(480, Math.round(config.canvasItemWidth));
+    barcodeCanvas.height = Math.max(160, config.barcodeDrawHeight + 40);
+    const barcodeCtx = barcodeCanvas.getContext('2d');
+
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = config.pageWidthPx;
+    pageCanvas.height = config.pageHeightPx;
+    const pageCtx = pageCanvas.getContext('2d');
+    pageCtx.textAlign = 'center';
+    pageCtx.textBaseline = 'alphabetic';
+
+    return {
+      layout,
+      barcodeCanvas,
+      barcodeCtx,
+      pageCanvas,
+      pageCtx
+    };
+  }
+
+  function drawItem(pageCtx, barcodeCtx, barcodeCanvas, config, layout, item, col, rowOnPage) {
+    const x = Math.round((config.margin + col * (config.itemWidth + config.columnGapMm)) * config.pxPerMm);
+    const y = Math.round((config.margin + rowOnPage * config.itemHeight) * config.pxPerMm);
+
+    const nameBasePx = Math.round(11 * config.pxPerMm / 3);
+    const nameMinPx = Math.round(7 * config.pxPerMm / 3);
+    const codeBasePx = Math.round(9 * config.pxPerMm / 3);
+    const codeFallbackPx = Math.round(8 * config.pxPerMm / 3);
+    const textMaxWidth = Math.max(40, config.canvasItemWidth - 24);
+
+    pageCtx.fillStyle = '#000000';
+    setFittedTextFont(
+      pageCtx,
+      item.name,
+      textMaxWidth,
+      nameBasePx,
+      nameMinPx,
+      'bold'
+    );
+    pageCtx.fillText(item.name, x + config.canvasItemWidth / 2, y + layout.nameTextY);
+
+    try {
+      fillWhite(barcodeCtx, barcodeCanvas.width, barcodeCanvas.height);
+      JsBarcode(barcodeCanvas, item.code, {
+        format: 'CODE128',
+        width: 3,
+        height: Math.round(config.barcodeDrawHeight * 0.8),
+        displayValue: false,
+        margin: 0,
+        background: '#FFFFFF',
+        lineColor: '#000000'
+      });
+
+      const barcodeImgWidth = Math.max(40, config.canvasItemWidth - 24);
+      pageCtx.drawImage(
+        barcodeCanvas,
+        0,
+        0,
+        barcodeCanvas.width,
+        barcodeCanvas.height,
+        x + 12,
+        y + layout.barcodeTop,
+        barcodeImgWidth,
+        config.barcodeDrawHeight
+      );
+    } catch (error) {
+      pageCtx.font = `normal ${codeFallbackPx}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+      pageCtx.fillStyle = '#666666';
+      pageCtx.fillText(item.code, x + config.canvasItemWidth / 2, y + layout.fallbackCodeY);
     }
 
-    function handleDragLeave(e) {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
+    pageCtx.font = `normal ${codeBasePx}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+    pageCtx.fillStyle = '#000000';
+    pageCtx.fillText(item.code, x + config.canvasItemWidth / 2, y + layout.codeTextY);
+  }
+
+  function setFittedTextFont(context, text, maxWidth, startPx, minPx, weight) {
+    let fontPx = startPx;
+    while (fontPx > minPx) {
+      context.font = `${weight} ${fontPx}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+      if (context.measureText(text).width <= maxWidth) {
+        return;
+      }
+      fontPx -= 1;
+    }
+    context.font = `${weight} ${minPx}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+  }
+
+  function renderPage(excelRows, startIndex, config, drawState, columns) {
+    const pageSize = config.rowsPerPage * columns;
+    const endIndex = Math.min(startIndex + pageSize, excelRows.length);
+
+    fillWhite(drawState.pageCtx, config.pageWidthPx, config.pageHeightPx);
+
+    for (let index = startIndex; index < endIndex; index += 1) {
+      const localIndex = index - startIndex;
+      const col = localIndex % columns;
+      const rowOnPage = Math.floor(localIndex / columns);
+      drawItem(
+        drawState.pageCtx,
+        drawState.barcodeCtx,
+        drawState.barcodeCanvas,
+        config,
+        drawState.layout,
+        excelRows[index],
+        col,
+        rowOnPage
+      );
+    }
+  }
+
+  function renderPdfPreview() {
+    const columns = getColumnsCount();
+    const config = createPdfRenderConfig(columns);
+    const drawState = createDrawState(config);
+    renderPage(excelData, 0, config, drawState, columns);
+    pdfPreviewImage.src = drawState.pageCanvas.toDataURL('image/png');
+  }
+
+  function drawPage(pdf, pageCanvas, config) {
+    const pageDataUrl = pageCanvas.toDataURL('image/png');
+    pdf.addImage(pageDataUrl, 'PNG', 0, 0, config.pageWidth, config.pageHeight, undefined, 'FAST');
+  }
+
+  function generatePDF() {
+    const columns = getColumnsCount();
+    const config = createPdfRenderConfig(columns);
+    const drawState = createDrawState(config);
+    const pageSize = config.rowsPerPage * columns;
+
+    const pdf = new window.jspdf.jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    for (let startIndex = 0; startIndex < excelData.length; startIndex += pageSize) {
+      renderPage(excelData, startIndex, config, drawState, columns);
+      drawPage(pdf, drawState.pageCanvas, config);
+      if (startIndex + pageSize < excelData.length) {
+        pdf.addPage();
+      }
     }
 
-    function handleDrop(e) {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            processFile(files[0]);
-        }
-    }
+    const timestamp = new Date().toISOString().slice(0, 10);
+    pdf.save(`条形码-${timestamp}.pdf`);
+  }
 
-    // 文件选择处理
-    function handleFileSelect(e) {
-        const files = e.target.files;
-        if (files.length > 0) {
-            processFile(files[0]);
-        }
-    }
-
-    // 处理文件
-    function processFile(file) {
-        const validTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel'
-        ];
-        const extension = file.name.split('.').pop().toLowerCase();
-
-        if (!validTypes.includes(file.type) && !['xlsx', 'xls', 'csv'].includes(extension)) {
-            alert('请上传 Excel 文件 (.xlsx 或 .xls)');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                parseExcel(e.target.result, file.name);
-            } catch (err) {
-                alert('解析 Excel 文件失败：' + err.message);
-            }
-        };
-        reader.onerror = function() {
-            alert('读取文件失败');
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    // 解析 Excel
-    function parseExcel(data, fileName) {
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        excelData = jsonData
-            .filter(row => row.length >= 2 && row[0] && row[1])
-            .map(row => ({
-                code: String(row[0]).trim(),
-                name: String(row[1]).trim()
-            }));
-
-        if (excelData.length === 0) {
-            alert('Excel 文件中没有找到有效数据（需要编码和品名两列）');
-            return;
-        }
-
-        fileInfo.textContent = `已加载：${fileName}，共 ${excelData.length} 条数据`;
-        fileInfo.style.display = 'block';
-        fileInput.value = '';
-
-        renderPreview();
-
-        previewSection.style.display = 'block';
-        settingsSection.style.display = 'block';
-        actionSection.style.display = 'block';
-    }
-
-    // 渲染预览
-    function renderPreview() {
-        previewBody.innerHTML = '';
-        const previewRows = excelData.slice(0, 5);
-
-        previewRows.forEach((item, idx) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${idx + 1}</td><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td>`;
-            previewBody.appendChild(tr);
-        });
-
-        const total = excelData.length;
-        const display = total > 5 ? `共 ${total} 条，显示前 5 条` : `共 ${total} 条`;
-        previewCount.textContent = display;
-    }
-
-    // HTML 转义
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // 获取每行数量设置
-    function getColumnsCount() {
-        const radios = columnsGroup.querySelectorAll('input[name="columns"]');
-        for (const radio of radios) {
-            if (radio.checked) {
-                return parseInt(radio.value, 10);
-            }
-        }
-        return 5;
-    }
-
-    // 填充画布白色背景
-    function fillWhite(ctx, width, height) {
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-    }
-
-    // 生成 PDF
-    function generatePDF() {
-        const columns = getColumnsCount();
-
-        // A4 尺寸（mm）
-        const pageWidth = 210;
-        const pageHeight = 297;
-        const margin = 15;
-
-        // 可用区域
-        const contentWidth = pageWidth - margin * 2;
-        const contentHeight = pageHeight - margin * 2;
-
-        // 每个条形码单元的尺寸 (mm)
-        const itemWidth = contentWidth / columns;
-        const itemHeight = 30; // 每行高度（mm）
-        const barcodeHeight = 18; // 条形码高度
-
-        // 转换为像素 (1mm ≈ 3.78px at 96dpi)
-        const pxPerMm = 3.78;
-        const canvasItemWidth = itemWidth * pxPerMm;
-        const canvasBarcodeHeight = barcodeHeight * pxPerMm;
-
-        // 计算每页行数
-        const rowsPerPage = Math.floor(contentHeight / itemHeight);
-
-        // 创建 PDF
-        const pdf = new window.jspdf.jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
-
-        // 当前页和位置
-        let currentPage = 0;
-        let currentRow = 0;
-
-        // 创建条形码 canvas
-        const barcodeCanvas = document.createElement('canvas');
-        barcodeCanvas.width = 300;
-        barcodeCanvas.height = 60;
-        const barcodeCtx = barcodeCanvas.getContext('2d');
-
-        // 创建页面 canvas
-        const pageCanvas = document.createElement('canvas');
-        const pageWidthPx = Math.round(pageWidth * pxPerMm);
-        const pageHeightPx = Math.round(pageHeight * pxPerMm);
-        pageCanvas.width = pageWidthPx;
-        pageCanvas.height = pageHeightPx;
-        const pageCtx = pageCanvas.getContext('2d');
-
-        // 初始化第一页画布（白色背景）
-        fillWhite(pageCtx, pageWidthPx, pageHeightPx);
-
-        excelData.forEach((item, index) => {
-            const col = index % columns;
-            const row = Math.floor(index / columns);
-
-            // 检查是否需要新页
-            if (row >= (currentPage + 1) * rowsPerPage) {
-                // 把当前页 canvas 添加到 PDF
-                const pageDataUrl = pageCanvas.toDataURL('image/png');
-                pdf.addImage(pageDataUrl, 'PNG', 0, 0, pageWidth, pageHeight);
-
-                currentPage++;
-                currentRow = currentPage * rowsPerPage;
-                pdf.addPage();
-
-                // 重置画布（白色背景）
-                fillWhite(pageCtx, pageWidthPx, pageHeightPx);
-            }
-
-            // 计算在页面 canvas 上的位置
-            const x = (margin + col * itemWidth) * pxPerMm;
-            const y = (margin + (row - currentRow) * itemHeight) * pxPerMm;
-
-            // 品名在顶部
-            pageCtx.fillStyle = '#000000';
-            pageCtx.font = 'bold 11px "Microsoft YaHei", "PingFang SC", sans-serif';
-            pageCtx.textAlign = 'center';
-            pageCtx.fillText(item.name, x + canvasItemWidth / 2, y + 14);
-
-            // 条形码在中间
-            try {
-                fillWhite(barcodeCtx, barcodeCanvas.width, barcodeCanvas.height);
-
-                JsBarcode(barcodeCanvas, item.code, {
-                    format: 'CODE128',
-                    width: 1.5,
-                    height: 40,
-                    displayValue: false,
-                    margin: 0
-                });
-
-                const barcodeImgWidth = canvasItemWidth - 12;
-                const barcodeImgHeight = 50;
-
-                pageCtx.drawImage(
-                    barcodeCanvas,
-                    0, 0, barcodeCanvas.width, barcodeCanvas.height,
-                    x + 6, y + 18, barcodeImgWidth, barcodeImgHeight
-                );
-            } catch (e) {
-                // 条形码失败时显示编码
-                pageCtx.font = '8px "Microsoft YaHei", "PingFang SC", sans-serif';
-                pageCtx.fillStyle = '#666666';
-                pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 28);
-            }
-
-            // 编码在底部
-            pageCtx.font = '9px "Microsoft YaHei", "PingFang SC", sans-serif';
-            pageCtx.fillStyle = '#000000';
-            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 42);
-            pageCtx.fillText(item.code, x + canvasItemWidth / 2, y + 38);
-        });
-
-        // 添加最后一页
-        const finalPageDataUrl = pageCanvas.toDataURL('image/png');
-        pdf.addImage(finalPageDataUrl, 'PNG', 0, 0, pageWidth, pageHeight);
-
-        // 下载 PDF
-        const timestamp = new Date().toISOString().slice(0, 10);
-        pdf.save(`条形码_${timestamp}.pdf`);
-    }
-
-    // 启动
-    init();
+  init();
 })();
