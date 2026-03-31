@@ -12,9 +12,13 @@
             <div class="header-content">
                 <div class="logo-area">
                     <div class="logo-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
-                        </svg>
+                        <div class="logo-icon-inner">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
                     </div>
                     <div class="logo-text">
                         <h1>条形码生成器</h1>
@@ -35,7 +39,7 @@
                         </div>
                         <p class="upload-title">拖拽 Excel 文件到此处</p>
                         <p class="upload-subtitle">或点击选择文件</p>
-                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
                     </div>
 
                     <div class="format-hint">
@@ -98,7 +102,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        生成 PDF 下载
+                        <span>生成 PDF 下载</span>
                     </button>
                 </section>
             </div>
